@@ -5,6 +5,7 @@ import chaiAsPromised from 'chai-as-promised';
 import { ethers } from 'hardhat';
 import { MockERC20, USDIDOPool } from '../typechain';
 import { deployMockERC20, deployUSDIDOPool } from './helpers/deploy';
+import exp from 'constants';
 use(chaiAsPromised);
 
 let DECIMAL = 10n ** 18n;
@@ -32,7 +33,7 @@ describe('USD IDO pools test', () => {
       0,
       0,
       0,
-      DECIMAL,
+      DECIMAL
     );
   });
 
@@ -132,6 +133,10 @@ describe('USD IDO pools test', () => {
     expect((await idoToken.balanceOf(users[1].address)).toBigInt()).deep.eq(
       1000n * DECIMAL - 12n
     );
+    const treasuryBal = (await usdb.balanceOf(treasury.address)).add(
+      await fyUSD.balanceOf(treasury.address)
+    );
+    expect(treasuryBal.toBigInt()).eq(2000n * DECIMAL - 12n);
   });
 
   it('cannot participate after finalized', async () => {
@@ -200,10 +205,15 @@ describe('USD IDO pools test', () => {
     );
     expect(bal).deep.equal(Array(2).fill(500n * DECIMAL));
     expect((await fyUSD.balanceOf(stakers[0].address)).toBigInt()).eq(
-      DECIMAL * 1000n / 2n
+      (DECIMAL * 1000n) / 2n
     );
     expect((await usdb.balanceOf(stakers[1].address)).toBigInt()).eq(
       (DECIMAL * 1000n) / 2n
     );
+
+    const treasuryBal = (await usdb.balanceOf(treasury.address)).add(
+      await fyUSD.balanceOf(treasury.address)
+    );
+    expect(treasuryBal.toBigInt()).eq(1000n * DECIMAL);
   });
 });

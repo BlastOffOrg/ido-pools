@@ -125,6 +125,7 @@ describe('ETH IDO pools test', () => {
         }
       );
 
+    const treasuryEthBal = await ethers.provider.getBalance(treasury.address);
     const wrapIdoPool = WrapperBuilder.wrap(idoPool).usingSimpleNumericMock({
       mockSignersCount: 10,
       timestampMilliseconds: Date.now(),
@@ -141,6 +142,12 @@ describe('ETH IDO pools test', () => {
     expect((await idoToken.balanceOf(users[1].address)).toBigInt()).deep.eq(
       1000n * (DECIMAL - 12n)
     );
+    const newTreasuryBal = await ethers.provider.getBalance(treasury.address);
+    const treasuryChange = newTreasuryBal
+      .sub(treasuryEthBal)
+      .add(await fyETH.balanceOf(treasury.address))
+      .toBigInt();
+    expect(treasuryChange).eq(2n * DECIMAL - 12n);
   });
 
   it('cannot participate after finalized', async () => {
@@ -200,6 +207,7 @@ describe('ETH IDO pools test', () => {
     const stakers = users.slice(0, 2);
 
     await wrapIdoPool.finalize();
+    const treasuryEthBal = await ethers.provider.getBalance(treasury.address);
     const etherBal = await Promise.all(
       stakers.map(async (staker) => ethers.provider.getBalance(staker.address))
     );
@@ -228,6 +236,12 @@ describe('ETH IDO pools test', () => {
         .add(BigNumber.from(DECIMAL / 2n))
         .toBigInt()
     );
+    const newTreasuryBal = await ethers.provider.getBalance(treasury.address);
+    const treasuryChange = newTreasuryBal
+      .sub(treasuryEthBal)
+      .add(await fyETH.balanceOf(treasury.address))
+      .toBigInt();
+    expect(treasuryChange).eq(DECIMAL);
   });
 
   it('refund correct amount after finalized when stake both type', async () => {
@@ -275,9 +289,13 @@ describe('ETH IDO pools test', () => {
     const stakers = users.slice(0, 2);
 
     await wrapIdoPool.finalize();
-    const etherBal = (await Promise.all(
-      stakers.map(async (staker) => ethers.provider.getBalance(staker.address))
-    )).map((b) => b.toBigInt());
+    const etherBal = (
+      await Promise.all(
+        stakers.map(async (staker) =>
+          ethers.provider.getBalance(staker.address)
+        )
+      )
+    ).map((b) => b.toBigInt());
     const txs = await Promise.all(
       stakers.map(async (staker) =>
         idoPool.connect(staker).claim(staker.address)
