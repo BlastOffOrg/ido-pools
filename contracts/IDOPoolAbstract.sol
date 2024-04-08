@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts-upgradeable/access/Ownable2StepUpgradeable.sol";
 import "./interface/IIDOPool.sol";
+import "./interface/IERC20Mintable.sol";
 import "./lib/TokenTransfer.sol";
 import "hardhat/console.sol";
 
@@ -16,7 +17,7 @@ abstract contract IDOPoolAbstract is IIDOPool, Ownable2StepUpgradeable {
   uint256 public claimableTime;
   bool public isClaimable;
 
-  uint256 public idoPrice; // expected price of ido
+  uint256 public idoPrice; // expected price of ido decimal is ido token decimal
   uint256 public idoSize; // total amount of ido token
   uint256 public snapshotTokenPrice;
   uint256 public snapshotPriceDecimals;
@@ -161,7 +162,7 @@ abstract contract IDOPoolAbstract is IIDOPool, Ownable2StepUpgradeable {
 
   /**
    * @dev Refund staker after claim and transfer fund to treasury
-   * 
+   *
    * @param pos position of staker
    * @param staker staker to refund
    * @param excessAmount amount to refund
@@ -173,13 +174,34 @@ abstract contract IDOPoolAbstract is IIDOPool, Ownable2StepUpgradeable {
   ) internal {
     if (excessAmount <= pos.fyAmount) {
       TokenTransfer._transferToken(fyToken, staker, excessAmount);
-      TokenTransfer._transferToken(fyToken, treasury, pos.fyAmount - excessAmount);
-      TokenTransfer._transferToken(buyToken, treasury, pos.amount - pos.fyAmount);
+      TokenTransfer._transferToken(
+        fyToken,
+        treasury,
+        pos.fyAmount - excessAmount
+      );
+      TokenTransfer._transferToken(
+        buyToken,
+        treasury,
+        pos.amount - pos.fyAmount
+      );
     } else {
       TokenTransfer._transferToken(fyToken, staker, pos.fyAmount);
-      TokenTransfer._transferToken(buyToken, staker, excessAmount - pos.fyAmount);
-      TokenTransfer._transferToken(buyToken, treasury, pos.amount - excessAmount);
+      TokenTransfer._transferToken(
+        buyToken,
+        staker,
+        excessAmount - pos.fyAmount
+      );
+      TokenTransfer._transferToken(
+        buyToken,
+        treasury,
+        pos.amount - excessAmount
+      );
     }
+  }
+
+  function _depositToTreasury(Position memory pos) internal {
+    TokenTransfer._transferToken(fyToken, treasury, pos.fyAmount);
+    TokenTransfer._transferToken(buyToken, treasury, pos.amount - pos.fyAmount);
   }
 
   /**
@@ -221,9 +243,10 @@ abstract contract IDOPoolAbstract is IIDOPool, Ownable2StepUpgradeable {
     (uint256 alloc, uint256 excessive) = _getPostionValue(pos);
 
     delete accountPosition[staker];
-    if (excessive > 0)
-      _refundPostition(pos, staker, excessive);
-    // TokenTransfer._transferToken(pos.token, treasury, pos.amount - excessive);
+
+    if (excessive > 0) _refundPostition(pos, staker, excessive);
+    else _depositToTreasury(pos);
+
     TokenTransfer._transferToken(idoToken, staker, alloc);
 
     emit Claim(staker, alloc, excessive);
@@ -233,12 +256,12 @@ abstract contract IDOPoolAbstract is IIDOPool, Ownable2StepUpgradeable {
    * @dev Withdraw remaining IDO token if funding goal is not reached
    */
   function withdrawSpareIDO() external finalized onlyOwner {
-    uint256 totalValueBought = (idoSize * idoPrice) / (10 ** idoDecimals);
-    if (totalValueBought >= fundedUSDValue) return;
+    uint256 totalIDOGoal = (idoSize * idoPrice) / (10 ** idoDecimals);
+    if (totalIDOGoal <= fundedUSDValue) revert();
 
-    uint256 totalBought = (fundedUSDValue * snapshotPriceDecimals) /
-      snapshotTokenPrice;
-    uint256 spare = idoSize - totalBought;
+    uint256 totalBought = fundedUSDValue / idoPrice * (10 ** idoDecimals);
+    uint256 idoBal = IERC20Mintable(idoToken).balanceOf(address(this));
+    uint256 spare = idoBal - totalBought;
     TokenTransfer._transferToken(idoToken, msg.sender, spare);
   }
 }
